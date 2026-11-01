@@ -96,7 +96,8 @@ def database_keys(path):
         with closing(
             sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
         ) as database:
-            database.enable_load_extension(False)
+            if hasattr(database, "enable_load_extension"):
+                database.enable_load_extension(False)
             database.execute("PRAGMA query_only=ON")
             database.execute("PRAGMA trusted_schema=OFF")
             keys = set()
@@ -158,7 +159,8 @@ def extract_key(path):
                     uri=True,
                 )
             ) as manifest:
-                manifest.enable_load_extension(False)
+                if hasattr(manifest, "enable_load_extension"):
+                    manifest.enable_load_extension(False)
                 manifest.execute("PRAGMA query_only=ON")
                 manifest.execute("PRAGMA trusted_schema=OFF")
                 entries = manifest.execute(

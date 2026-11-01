@@ -129,6 +129,29 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(path.read_bytes()).digest(), before)
         self.assertEqual(list(self.root.iterdir()), [path])
 
+    def test_imports_work_without_extension_loading_api(self):
+        sources = [(self.database(), 1), (self.backup(), 2)]
+        original_connect = sqlite3.connect
+
+        def connect_without_extension_loading(*args, **kwargs):
+            connection = original_connect(*args, **kwargs)
+            return SimpleNamespace(execute=connection.execute, close=connection.close)
+
+        for path, expected_connections in sources:
+            with self.subTest(source=path.name):
+                with patch.object(
+                    reader.sqlite3,
+                    "connect",
+                    side_effect=connect_without_extension_loading,
+                ) as connect:
+                    self.assertEqual(
+                        reader.extract_key(str(path)), {"ok": True, "key": "00" * 16}
+                    )
+                self.assertEqual(connect.call_count, expected_connections)
+                for call in connect.call_args_list:
+                    self.assertIn("mode=ro&immutable=1", call.args[0])
+                    self.assertIs(call.kwargs["uri"], True)
+
     def test_database_cannot_load_extensions_from_a_view(self):
         path = self.root / "assa.sqlite"
         with closing(sqlite3.connect(path)) as database:
