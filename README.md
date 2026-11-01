@@ -2,7 +2,7 @@
 
 A small, local macOS menu-bar app for an Oura Gen3 ring: battery percentage, charging reminders, optional desk breaks, and resting heart-rate check-ins.
 
-**Requires macOS 15 or newer, Bluetooth, and an existing unencrypted iPhone backup or saved ring key.** Setup finds the key locally, so you do not normally need to copy it. No Oura account login, cloud service, subscription, Python installation, ring reset, or new phone backup transfer is needed.
+**Requires macOS 15 or newer, Bluetooth, and an existing unencrypted iPhone backup or saved ring key.** Setup finds the key locally, so you do not normally need to copy it. No Oura account login, cloud service, subscription, Python installation, or ring reset is needed. With an existing backup or saved key, no new phone backup transfer is needed.
 
 ## Install
 
@@ -14,6 +14,8 @@ A small, local macOS menu-bar app for an Oura Gen3 ring: battery percentage, cha
 The app is ad-hoc signed, **not Apple-notarized**. macOS may require approval in **System Settings → Privacy & Security** before the first launch. Follow Apple’s normal app-approval flow; the installer does not disable Gatekeeper or remove quarantine attributes.
 
 ## Connect your ring
+
+**Need a backup? Start with [Find a backup](docs/BACKUPS.md).** It explains where existing backups live, how to choose the right folder, and optional Finder backup-creation steps. Nothing starts a new transfer automatically.
 
 Choose **Connect ring…** from the menu whenever you need to set up or change a ring.
 
@@ -54,7 +56,7 @@ Only the latest check-in is kept locally. Oura’s own scores are not reproduced
 
 ## Privacy
 
-The app makes no network requests at runtime. Ring communication is local Bluetooth; keys stay in macOS Keychain. Selected backup/database files are read locally and never copied into the app or uploaded. The ring identifier, alert preferences, recovery marker, and latest check-in stay on your Mac.
+The app does not upload data or call a cloud API. Ring communication is local Bluetooth; keys stay in macOS Keychain. Selected backup/database files are read locally and never copied into the app or uploaded. The ring identifier, alert preferences, recovery marker, and latest check-in stay on your Mac. Help can open the public setup guide in your browser.
 
 Local state lives in `~/Library/Application Support/RingBattery`. Earlier local installations can migrate their private key after successful authentication; the original key file is left in place. Do not include keys, backups, database exports, or health records in GitHub issues.
 

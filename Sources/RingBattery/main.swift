@@ -384,7 +384,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let primary = NSButton(title: "Connect using existing backup", target: self, action: #selector(connectExistingBackup))
         primary.bezelStyle = .rounded
         let choose = NSButton(title: "Choose an existing backup…", target: self, action: #selector(importBackup))
-        let stack = NSStackView(views: [help, picker, scan, primary, choose, advancedButton, advanced, statusLabel])
+        let backupHelp = NSButton(title: "Where do I get a backup?", target: self, action: #selector(showBackupHelp))
+        let stack = NSStackView(views: [help, picker, scan, primary, choose, backupHelp, advancedButton, advanced, statusLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
@@ -399,6 +400,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         scanNearby()
+    }
+
+    @objc func showBackupHelp() {
+        let alert = NSAlert()
+        alert.messageText = "Find an existing iPhone backup"
+        alert.informativeText = "In Finder, press Shift–Command–G and open:\n~/Library/Application Support/MobileSync/Backup/\n\nSelect the device-backup folder containing Manifest.db. An iCloud backup cannot be used here. Encrypted backups are not supported.\n\nIf you have no usable backup, use a saved key under Advanced. The full guide also explains optional Finder backup creation, which starts a new transfer only if you choose it."
+        alert.addButton(withTitle: "Open backup folder")
+        alert.addButton(withTitle: "Read full guide")
+        alert.addButton(withTitle: "Close")
+        NSApp.activate(ignoringOtherApps: true)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MobileSync/Backup")
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue { NSWorkspace.shared.open(folder) }
+            else { showMessage("No local backup folder", "This Mac has no backup at the standard location. Choose a backup stored elsewhere or use a saved ring key. The setup guide explains the remaining options.") }
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(URL(string: "https://github.com/bodharma/ring-battery/blob/main/docs/BACKUPS.md")!)
+        default: break
+        }
     }
 
     @objc func toggleAdvanced(_ sender: NSButton) {
