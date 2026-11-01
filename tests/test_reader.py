@@ -424,10 +424,11 @@ class AsyncReaderTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(json.loads(output.getvalue())["ok"])
                 self.assertNotIn("00" * 15, output.getvalue())
 
-    async def test_scan_and_self_test_cli_need_no_input(self):
+    async def test_scan_self_test_and_existing_backup_cli_need_no_input(self):
         for flag, result in (
             ("--scan", {"ok": True, "rings": []}),
             ("--self-test", {"ok": True, "self_test": True}),
+            ("--existing-backup", {"ok": True, "key": "00" * 16}),
         ):
             output = io.StringIO()
             with (
@@ -437,6 +438,11 @@ class AsyncReaderTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(reader, "read_input", side_effect=AssertionError("stdin")),
                 patch.object(
                     reader, "scan", AsyncMock(return_value={"ok": True, "rings": []})
+                ),
+                patch.object(
+                    reader,
+                    "existing_backup_key",
+                    return_value={"ok": True, "key": "00" * 16},
                 ),
             ):
                 await reader.main()

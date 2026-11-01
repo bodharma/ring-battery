@@ -2,7 +2,7 @@
 
 A small, local macOS menu-bar app for an Oura Gen3 ring: battery percentage, charging reminders, optional desk breaks, and resting heart-rate check-ins.
 
-**Requires macOS 15 or newer, Bluetooth, and your ring’s existing authentication key.** No Oura account login, cloud service, subscription, Python installation, or ring reset is needed. An existing unencrypted iPhone backup can supply the key during setup.
+**Requires macOS 15 or newer, Bluetooth, and an existing unencrypted iPhone backup or saved ring key.** Setup finds the key locally, so you do not normally need to copy it. No Oura account login, cloud service, subscription, Python installation, ring reset, or new phone backup transfer is needed.
 
 ## Install
 
@@ -19,14 +19,14 @@ Choose **Connect ring…** from the menu whenever you need to set up or change a
 
 1. Keep the ring close to the Mac and click **Scan nearby rings**. If it does not advertise, put it on its charger and temporarily pause the phone’s Bluetooth connection.
 2. Select your ring. A short identifier distinguishes rings with the same name.
-3. Import a **key file**, paste the existing 32-character key, or use **Import iPhone backup…** to select an existing unencrypted Finder backup folder or exported Oura app database.
-4. Click **Connect this ring**. The app authenticates and reads its battery before storing the key in your login Keychain.
+3. Click **Connect using existing backup**. The app searches existing local Finder backups for one distinct usable ring key, authenticates, and reads the battery before saving the key in your login Keychain.
+4. If automatic discovery cannot read the backup or finds multiple ring keys, use **Choose an existing backup…**. **Advanced key import** is available for an exported Oura database, a key file, or a 32-character key.
 
 An already paired Oura ring does not expose its authentication key over Bluetooth. Merely selecting the ring cannot bypass that requirement. If you have neither the existing key nor a supported backup/database, connection cannot be completed yet.
 
-Backup import reads only Oura’s database locally. It does not create a phone backup or upload files. **Encrypted backups are not supported** in this release; do not turn off backup encryption just to use this feature. Import an already extracted key/database instead. Multiple distinct ring keys require selecting the correct key separately.
+Automatic discovery reads backup catalogs and Oura’s database locally from the standard Finder backup location. It checks at most 32 existing backups and refuses to guess if distinct keys are found. Manual folder selection handles backups stored elsewhere. It does not create a phone backup, contact the phone, or upload files. **Encrypted backups are not supported** in this release; do not turn off backup encryption just to use this feature. Import an already extracted key/database instead.
 
-Setup preserves your ring’s existing app key. It never pairs, factory-resets, rekeys, erases history, changes its clock, or starts history synchronization.
+Setup preserves your ring’s existing app key. It never factory-resets, rekeys, erases history, changes its clock, or starts history synchronization.
 
 ## What it does
 

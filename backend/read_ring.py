@@ -26,6 +26,22 @@ class ReaderError(ValueError):
     """An error whose fixed message is safe to return to the app."""
 
 
+class NoKeyError(ReaderError):
+    pass
+
+
+class EncryptedBackupError(ReaderError):
+    pass
+
+
+class AmbiguousKeyError(ReaderError):
+    pass
+
+
+class InvalidKeyDataError(ReaderError):
+    pass
+
+
 def data_directory():
     path = Path(
         os.environ.get(
@@ -110,16 +126,20 @@ def database_keys(path):
                     try:
                         key = base64.b64decode(value, validate=True)
                     except (ValueError, binascii.Error) as exc:
-                        raise ReaderError(
+                        raise InvalidKeyDataError(
                             "The database contains an invalid ring key."
                         ) from exc
                 else:
-                    raise ReaderError("The database contains an invalid ring key.")
+                    raise InvalidKeyDataError(
+                        "The database contains an invalid ring key."
+                    )
                 if len(key) != 16:
-                    raise ReaderError("The database contains an invalid ring key.")
+                    raise InvalidKeyDataError(
+                        "The database contains an invalid ring key."
+                    )
                 keys.add(key)
                 if len(keys) > 1:
-                    raise ReaderError(
+                    raise AmbiguousKeyError(
                         "Multiple distinct ring keys were found. Select a file for one ring."
                     )
             return keys
@@ -150,7 +170,7 @@ def extract_key(path):
                 ):
                     raise ReaderError("The backup manifest is invalid.")
                 if metadata.get("IsEncrypted"):
-                    raise ReaderError(
+                    raise EncryptedBackupError(
                         "Encrypted Finder backups are not supported. Import a key file or Oura database instead."
                     )
             with closing(
@@ -188,7 +208,7 @@ def extract_key(path):
                     )
                 keys.update(database_keys(stored))
                 if len(keys) > 1:
-                    raise ReaderError(
+                    raise AmbiguousKeyError(
                         "Multiple distinct ring keys were found. Select a file for one ring."
                     )
         else:
@@ -207,7 +227,7 @@ def extract_key(path):
                         )
                     keys = {bytes.fromhex(content.strip().decode("ascii"))}
         if not keys:
-            raise ReaderError(
+            raise NoKeyError(
                 "No ring authentication key was found in the selected source."
             )
         return {"ok": True, "key": keys.pop().hex()}
@@ -218,6 +238,71 @@ def extract_key(path):
         OverflowError,
     ) as exc:
         raise ReaderError("The selected key source could not be read.") from exc
+
+
+def existing_backup_key():
+    root = Path.home()
+    hint = "Choose an existing backup folder or use Advanced key import."
+    try:
+        for component in ("Library", "Application Support", "MobileSync", "Backup"):
+            root /= component
+            if root.is_symlink():
+                raise ReaderError(
+                    "Automatic discovery requires a local backup folder. " + hint
+                )
+        backups = []
+        for child in root.iterdir():
+            manifest = child / "Manifest.db"
+            if (
+                not child.is_symlink()
+                and child.is_dir()
+                and not manifest.is_symlink()
+                and manifest.is_file()
+            ):
+                backups.append(child)
+                if len(backups) > 32:
+                    raise ReaderError(
+                        "More than 32 existing backups were found. Choose one existing backup folder."
+                    )
+    except FileNotFoundError as exc:
+        raise ReaderError("No existing local backups were found. " + hint) from exc
+    except OSError as exc:
+        raise ReaderError(
+            "Existing local backups could not be read. Check read access. " + hint
+        ) from exc
+
+    keys = set()
+    encrypted = unreadable = False
+    for backup in backups:
+        try:
+            keys.add(extract_key(str(backup))["key"])
+        except NoKeyError:
+            continue
+        except EncryptedBackupError:
+            encrypted = True
+        except AmbiguousKeyError as exc:
+            raise ReaderError(
+                "Multiple distinct ring keys were found in existing backups. Choose one existing backup folder."
+            ) from exc
+        except InvalidKeyDataError as exc:
+            raise ReaderError(
+                "An existing backup contains invalid ring key data. " + hint
+            ) from exc
+        except ReaderError:
+            unreadable = True
+        if len(keys) > 1:
+            raise ReaderError(
+                "Multiple distinct ring keys were found in existing backups. Choose one existing backup folder."
+            )
+    if keys:
+        return {"ok": True, "key": keys.pop()}
+    if unreadable:
+        raise ReaderError(
+            "Existing local backups could not be read. Check read access. " + hint
+        )
+    if encrypted:
+        raise ReaderError("Existing local backups are encrypted. " + hint)
+    raise ReaderError("No ring key was found in existing local backups. " + hint)
 
 
 def choose_device(devices, address):
@@ -467,6 +552,8 @@ async def main():
             result = await asyncio.wait_for(scan(), 45)
         elif operation == ["--extract-key"]:
             result = extract_key(read_input(("path",))["path"])
+        elif operation == ["--existing-backup"]:
+            result = existing_backup_key()
         elif operation in ([], ["--connect"], ["--check-in"], ["--probe"]):
             key, address = credentials(read_input(("key", "address")))
             duration = (

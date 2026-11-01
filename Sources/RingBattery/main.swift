@@ -121,7 +121,7 @@ func selfTest() {
     print("Alert, desk reminder and key validation self-checks passed")
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, CBCentralManagerDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, CBCentralManagerDelegate, NSWindowDelegate {
     let defaults = UserDefaults.standard
     let center = UNUserNotificationCenter.current()
     var status: NSStatusItem!
@@ -146,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     var setupStatus: NSTextField?
     var nearbyRings: [NearbyRing] = []
     var needsKeyMigration = false
+    var advancedControls: NSStackView?
 
     var breaksEnabled: Bool {
         get { defaults.object(forKey: "breaksEnabled") as? Bool ?? false }
@@ -355,7 +356,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 390), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Connect your Oura ring"
         window.isReleasedWhenClosed = false
-        let help = NSTextField(wrappingLabelWithString: "Choose your nearby ring and import its existing authentication key. This preserves your connection to the Oura app.")
+        window.delegate = self
+        let help = NSTextField(wrappingLabelWithString: "Choose your ring and connect using an existing local iPhone backup. Nothing is transferred from your phone. A previously saved ring key also works.")
         help.preferredMaxLayoutWidth = 470
         let picker = NSPopUpButton(frame: .zero)
         picker.addItem(withTitle: "Scan to find nearby rings")
@@ -365,21 +367,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         secret.placeholderString = "32-character ring key"
         secret.setAccessibilityLabel("Ring authentication key")
         keyField = secret
-        let imports = NSStackView(views: [NSButton(title: "Import key file…", target: self, action: #selector(importKeyFile)), NSButton(title: "Import iPhone backup…", target: self, action: #selector(importBackup))])
+        let imports = NSStackView(views: [NSButton(title: "Import key file…", target: self, action: #selector(importKeyFile))])
         imports.spacing = 12
-        let statusLabel = NSTextField(wrappingLabelWithString: "Keep the ring near your Mac. If scanning finds nothing, put it on its charger and pause the phone’s Bluetooth connection.")
+        let statusLabel = NSTextField(wrappingLabelWithString: "Keep the ring nearby. Setup needs an existing unencrypted backup or saved key; it never starts a new backup.")
         statusLabel.preferredMaxLayoutWidth = 470
         setupStatus = statusLabel
         let connect = NSButton(title: "Connect this ring", target: self, action: #selector(confirmConnection))
         connect.bezelStyle = .rounded
-        let stack = NSStackView(views: [help, picker, scan, NSTextField(labelWithString: "Existing ring key"), secret, imports, statusLabel, connect])
+        let advanced = NSStackView(views: [NSTextField(labelWithString: "Existing ring key"), secret, imports, connect])
+        advanced.orientation = .vertical
+        advanced.alignment = .leading
+        advanced.spacing = 8
+        advanced.isHidden = true
+        advancedControls = advanced
+        let advancedButton = NSButton(checkboxWithTitle: "Advanced key import", target: self, action: #selector(toggleAdvanced))
+        let primary = NSButton(title: "Connect using existing backup", target: self, action: #selector(connectExistingBackup))
+        primary.bezelStyle = .rounded
+        let choose = NSButton(title: "Choose an existing backup…", target: self, action: #selector(importBackup))
+        let stack = NSStackView(views: [help, picker, scan, primary, choose, advancedButton, advanced, statusLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
+        stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView?.addSubview(stack)
         if let content = window.contentView {
-            NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24), stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24), stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24), picker.widthAnchor.constraint(equalTo: stack.widthAnchor), secret.widthAnchor.constraint(equalTo: stack.widthAnchor)])
+            NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24), stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24), stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24), picker.widthAnchor.constraint(equalTo: stack.widthAnchor), secret.widthAnchor.constraint(equalToConstant: 470)])
         }
         setupWindow = window
         window.center()
@@ -388,11 +401,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         scanNearby()
     }
 
+    @objc func toggleAdvanced(_ sender: NSButton) {
+        let visible = sender.state == .on
+        advancedControls?.isHidden = !visible
+        setupWindow?.setContentSize(NSSize(width: 520, height: visible ? 540 : 390))
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === setupWindow {
+            keyField?.stringValue = ""
+            if process != nil { stopReader() }
+        }
+    }
+
+    @objc func connectExistingBackup() {
+        guard process == nil else { return }
+        guard nearbyRings.indices.contains(ringPicker?.indexOfSelectedItem ?? -1) else {
+            setupStatus?.stringValue = "Scan for your ring and select it first."
+            return
+        }
+        setupStatus?.stringValue = "Looking for an existing local backup. No phone transfer is started…"
+        runBackend(["--existing-backup"]) { [weak self] reading in
+            guard let self = self, self.setupWindow?.isVisible == true, !self.quitting else { return }
+            if reading?.ok == true, let key = reading?.key.flatMap(normalizedKey) {
+                self.keyField?.stringValue = key
+                self.confirmConnection()
+            } else { self.setupStatus?.stringValue = reading?.error ?? "Could not find a usable local backup. Choose an existing backup folder or use Advanced key import." }
+        }
+    }
+
     @objc func scanNearby() {
         guard process == nil else { return }
         setupStatus?.stringValue = "Scanning for nearby Oura rings (10 seconds)…"
         runBackend(["--scan"], timeout: 25) { [weak self] reading in
-            guard let self = self else { return }
+            guard let self = self, self.setupWindow?.isVisible == true, !self.quitting else { return }
             self.nearbyRings = reading?.ok == true ? (reading?.rings ?? []).filter { UUID(uuidString: $0.address) != nil } : []
             self.ringPicker?.removeAllItems()
             for ring in self.nearbyRings { self.ringPicker?.addItem(withTitle: "Oura ring · \(ring.address.suffix(8))") }
@@ -414,10 +456,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             guard result == .OK, let path = panel.url?.path, let self = self else { return }
             self.setupStatus?.stringValue = "Reading the selected key source locally…"
             self.runBackend(["--extract-key"], request: ["path": path], timeout: 20) { [weak self] reading in
-                guard let self = self else { return }
+                guard let self = self, self.setupWindow?.isVisible == true, !self.quitting else { return }
                 if reading?.ok == true, let key = reading?.key.flatMap(normalizedKey) {
                     self.keyField?.stringValue = key
-                    self.setupStatus?.stringValue = "Key imported locally. Select your ring and click Connect this ring."
+                    if backup { self.confirmConnection() }
+                    else { self.setupStatus?.stringValue = "Key imported locally. Select your ring and click Connect this ring." }
                 } else { self.setupStatus?.stringValue = reading?.error ?? "Could not import a ring key from this file." }
             }
         }
@@ -431,7 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let address = nearbyRings[index].address
         setupStatus?.stringValue = "Authenticating and checking battery…"
         runBackend(["--connect"], request: ["key": key, "address": address]) { [weak self] reading in
-            guard let self = self else { return }
+            guard let self = self, self.setupWindow?.isVisible == true, !self.quitting else { return }
             guard reading?.ok == true, let battery = reading?.batteryPercent, (0...100).contains(battery),
                   let measured = reading?.measuredAt, measured.isFinite, abs(Date().timeIntervalSince1970 - measured) < 120 else {
                 self.setupStatus?.stringValue = reading?.error ?? "Connection failed. Check that this key belongs to the selected ring."
