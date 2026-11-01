@@ -1,0 +1,2 @@
+bleak==0.22.3
+pycryptodome==3.24.1
