@@ -20,8 +20,7 @@ PYINSTALLER_CONFIG_DIR="$WORK/cache" MACOSX_DEPLOYMENT_TARGET=15.0 "$PYTHON" -m 
     --distpath "$WORK/reader" --workpath "$WORK/pyinstaller" --specpath "$WORK" \
     --paths "$ROOT/backend/vendor" --add-data "$ROOT/backend/vendor:vendor" \
     --collect-submodules bleak.backends.corebluetooth \
-    --copy-metadata bleak --copy-metadata pycryptodome \
-    --copy-metadata pyobjc-framework-Cocoa --copy-metadata pyobjc-framework-CoreBluetooth \
+    --recursive-copy-metadata bleak --copy-metadata pycryptodome \
     --hidden-import Foundation --hidden-import CoreBluetooth --hidden-import objc \
     "$ROOT/backend/read_ring.py"
 /usr/bin/ditto "$WORK/reader/ring-reader" "$READER"
@@ -30,6 +29,7 @@ PYINSTALLER_CONFIG_DIR="$WORK/cache" MACOSX_DEPLOYMENT_TARGET=15.0 "$PYTHON" -m 
     "$ROOT/Sources/RingBattery/main.swift" -o "$APP/Contents/MacOS/RingBattery"
 cp "$ROOT/packaging/Info.plist" "$APP/Contents/Info.plist"
 mkdir -p "$APP/Contents/Resources/Licenses"
+cp "$ROOT/LICENSE" "$APP/Contents/Resources/Licenses/RingBattery.txt"
 cp "$("$PYTHON" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')/LICENSE.txt" "$APP/Contents/Resources/Licenses/Python.txt"
 
 # PyInstaller signs collected libraries; re-sign nested code before sealing the app.
